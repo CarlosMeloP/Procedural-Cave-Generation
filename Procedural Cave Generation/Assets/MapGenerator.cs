@@ -1,6 +1,6 @@
-﻿using UnityEngine;
-using System.Collections;
-using System;
+﻿using System;
+using UnityEngine;
+using System.Collections.Generic;
 
 public class MapGenerator : MonoBehaviour 
 {
@@ -23,6 +23,21 @@ public class MapGenerator : MonoBehaviour
 
     int[,] map;
 
+    public int WallThresholdSize = 50;
+    public int RoomThresholdSize = 50;
+
+    struct Coord
+    {
+        public int tileX;
+        public int tileY;
+
+        public Coord(int x, int y)
+        {
+            tileX = x;
+            tileY = y;
+        }
+    }
+
     void Start()
     {
         generateMap();
@@ -42,6 +57,9 @@ public class MapGenerator : MonoBehaviour
         for (int i = 0; i < smoothIterations; i++)
             smoothMap();
 
+        processMap(1, 0, WallThresholdSize);
+        processMap(0, 1, RoomThresholdSize);
+
         int[,] borderedMap = new int[width + BorderSize * 2, height + BorderSize * 2];
 
         for (int x = 0; x < borderedMap.GetLength(0); x++)
@@ -59,6 +77,103 @@ public class MapGenerator : MonoBehaviour
         meshGen.GenerateMesh(borderedMap, 1);
     }
 
+    /// <summary>
+    /// Find small chunks of walls and remove them.
+    /// </summary>
+    void processMap(int tileType, int newTileType, int thresholdSize)
+    {
+        List<List<Coord>> regions = getRegions(tileType);
+
+        foreach(List<Coord> wallRegion in regions)
+        {
+            if (wallRegion.Count < thresholdSize)
+            {
+                foreach(Coord tile in wallRegion)
+                    map[tile.tileX, tile.tileY] = newTileType;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get a chunk of tileType.
+    /// </summary>
+    /// <param name="tileType"></param>
+    /// <returns></returns>
+    List<List<Coord>> getRegions(int tileType)
+    {
+        List<List<Coord>> regions = new List<List<Coord>>();
+        int[,] mapFlags = new int[width, height];
+
+        for(int x = 0;x<width ;x++)
+        {
+            for(int y = 0;y<height;y++)
+            {
+                if(mapFlags[x,y] == 0 && map[x,y] == tileType)
+                {
+                    List<Coord> newRegion = getRegionTiles(x, y);
+                    regions.Add(newRegion);
+
+                    foreach(Coord tile in newRegion)
+                        mapFlags[tile.tileX, tile.tileY] = 1;
+                }
+            }
+        }
+
+        return regions;
+    }
+
+    /// <summary>
+    /// Finds all tiles inside a region and returns it.
+    /// </summary>
+    /// <param name="startX"></param>
+    /// <param name="startY"></param>
+    /// <returns></returns>
+    List<Coord> getRegionTiles(int startX, int startY)
+    {
+        List<Coord> tiles = new List<Coord>();
+        int[,] mapFlags = new int[width, height]; // If 1 then the tile has been checked.
+
+        int tileType = map[startX, startY];
+
+        Queue<Coord> queue = new Queue<Coord>();
+        queue.Enqueue(new Coord(startX, startY));
+        mapFlags[startX, startY] = 1;
+
+        while(queue.Count > 0)
+        {
+            Coord tile = queue.Dequeue();
+            tiles.Add(tile);
+
+            for(int x = tile.tileX - 1;x<=tile.tileX + 1;x++)
+            {
+                for(int y = tile.tileY-1;y<=tile.tileY + 1;y++)
+                {
+                    if(isInMapRange(x,y) && (y == tile.tileY || x == tile.tileX))   // In map and not diagonal.
+                    {
+                        if(mapFlags[x,y] == 0 && map[x,y] == tileType)
+                        {
+                            mapFlags[x, y] = 1;
+                            queue.Enqueue(new Coord(x, y));
+                        }
+                    }
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    /// <summary>
+    /// Checks if a tile exists in map.
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    /// <returns></returns>
+    bool isInMapRange(int x, int y)
+    {
+        return x >= 0 && x < width && y >= 0 && y < height;
+    }
+
     void randomFillMap()
     {
         if(useRandomSeed)
@@ -71,9 +186,7 @@ public class MapGenerator : MonoBehaviour
             for(int y = 0;y<height;y++)
             {
                 if(x == 0 || x == width - 1|| y == 0 || y == height - 1)
-                {
                     map[x, y] = 1;
-                }
                 else
                     map[x, y] = (pseudoRandom.Next(0, 100) < randomFillPercent) ? 1:0;
             }
@@ -103,17 +216,13 @@ public class MapGenerator : MonoBehaviour
         {
             for(int neighbourY = gridY - 1;neighbourY <= gridY + 1;neighbourY++)
             {
-                if (neighbourX >= 0 && neighbourX < width && neighbourY >= 0 && neighbourY < height)
+                if (isInMapRange(neighbourX, neighbourY))
                 {
                     if(neighbourX != gridX || neighbourY != gridY)
-                    {
                         wallCount += map[neighbourX, neighbourY];
-                    }
                 }
                 else
-                {
                     wallCount++;
-                }
             }
         }
 
