@@ -25,6 +25,7 @@ public class MapGenerator : MonoBehaviour
 
     public int WallThresholdSize = 50;
     public int RoomThresholdSize = 50;
+    public int PassagewayWidth = 1;
 
     struct Coord
     {
@@ -265,7 +266,87 @@ public class MapGenerator : MonoBehaviour
     void createPassage(Room roomA, Room roomB, Coord tileA, Coord tileB)
     {
         Room.ConnectRooms(roomA, roomB);
-        Debug.DrawLine(CoordToWorldPoint(tileA), CoordToWorldPoint(tileB), Color.green, 10f);
+        //Debug.DrawLine(CoordToWorldPoint(tileA), CoordToWorldPoint(tileB), Color.green, 10f);
+
+        List<Coord> line = getLine(tileA, tileB);
+        foreach (Coord c in line)
+            drawCircle(c, PassagewayWidth);
+
+    }
+
+    void drawCircle(Coord c, int r)
+    {
+        for(int x = -r;x<=r;x++)
+        {
+            for(int y = -r;y<=r;y++)
+            {
+                if(x*x + y*y <= r*r)
+                {
+                    int drawX = c.tileX + x;
+                    int drawY = c.tileY + y;
+
+                    if(isInMapRange(drawX, drawY))
+                        map[drawX, drawY] = 0;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets list of tiles connecting one coord to another in a straight line.
+    /// </summary>
+    /// <param name="from"></param>
+    /// <param name="to"></param>
+    /// <returns></returns>
+    List<Coord> getLine(Coord from, Coord to)
+    {
+        List<Coord> line = new List<Coord>();
+
+        int x = from.tileX;
+        int y = from.tileY;
+
+        int dx = to.tileX - from.tileX;
+        int dy = to.tileY - from.tileY;
+
+        bool inverted = false;
+        int step = Math.Sign(dx);
+        int gradientStep = Math.Sign(dy);
+
+        int longest = Mathf.Abs(dx);
+        int shortest = Mathf.Abs(dy);
+
+        if(longest < shortest)
+        {
+            inverted = true;
+            longest = Mathf.Abs(dy);
+            shortest = Math.Abs(dx);
+
+            step = Math.Sign(dy);
+            gradientStep = Math.Sign(dx);
+        }
+
+        int gradientAccumulation = longest / 2;
+        for(int i = 0;i<longest;i++)
+        {
+            line.Add(new Coord(x, y));
+
+            if (inverted)
+                y += step;
+            else
+                x += step;
+
+            gradientAccumulation += shortest;
+            if(gradientAccumulation >= longest)
+            {
+                if (inverted)
+                    x += gradientStep;
+                else
+                    y += gradientStep;
+                gradientAccumulation -= longest;
+            }
+        }
+
+        return line;
     }
 
     /// <summary>
